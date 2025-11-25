@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 英文文案重写工具 (SEO版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #10b981; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen py-10 px-4 font-sans">
+    <div class="max-w-4xl mx-auto space-y-8">
+        <div class="text-center">
+            <h1 class="text-3xl font-extrabold text-gray-800 tracking-tight">AI SEO Copy Rewrite</h1>
+            <p class="text-gray-500 mt-2">英文文案重写 · 智能埋词 · 中文对照</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="md:col-span-2 space-y-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <label class="block text-gray-800 font-bold mb-3 flex justify-between">
+                        <span>需要修改的原句 (Source Sentences)</span>
+                        <span class="text-xs font-normal text-gray-400">一行一句，可批量输入</span>
+                    </label>
+                    <textarea id="sourceSentences" rows="6" class="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 focus:ring-2 focus:ring-green-500 outline-none text-sm" placeholder="例如：&#10;Where can I buy cheap headphones?&#10;I want to learn coding fast.&#10;This is a good coffee shop."></textarea>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h3 class="text-gray-800 font-bold mb-4">关键词埋入配置</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">🔥 必须埋入 (Mandatory Keywords)</label>
+                            <input type="text" id="mandatoryKeywords" class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 outline-none text-sm" placeholder="例如：Best Budget Headphones, 2024 Guide (用逗号分隔)">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">🎲 挑选埋入 (Optional Keywords - AI 会随机选1个)</label>
+                            <input type="text" id="optionalKeywords" class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 outline-none text-sm" placeholder="例如：Affordable, Cheap, Discount, Low price (用逗号分隔)">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <label class="block text-gray-800 font-bold mb-3">🔑 API 设置 (可选)</label>
+                    <input type="password" id="userApiKey" class="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:ring-2 focus:ring-green-500 outline-none text-sm" placeholder="留空则使用默认配置，填入则覆盖">
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <label class="block text-gray-800 font-bold mb-3">自定义指令 (Prompt)</label>
+                    <textarea id="customInstructions" rows="6" class="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 focus:ring-2 focus:ring-green-500 outline-none text-sm" placeholder="例如：&#10;- 语气要像 TikTok 网红&#10;- 重点强调“省钱”&#10;- 适合发在 Instagram caption"></textarea>
+                    <p class="text-xs text-gray-400 mt-2 leading-relaxed">AI 将作为母语为英语的 SEO 专家进行重写，并自动过滤 AI 生硬词。</p>
+                </div>
+
+                <button id="generateBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition" onclick="generateRewrite()">⚡ 开始重写文案</button>
+            </div>
+        </div>
+
+        <div id="errorMessage" class="hidden max-w-4xl mx-auto bg-red-50 text-red-600 p-4 rounded-lg text-sm border border-red-200"></div>
+
+        <div id="resultArea" class="hidden bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="font-bold text-gray-800">✨ 重写结果</h3>
+                <button onclick="copyResult()" class="text-xs bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1 rounded">复制全部结果</button>
+            </div>
+
+            <div class="p-8 overflow-x-auto">
+                <table class="min-w-full text-sm border border-gray-300">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="border p-2">原句 (Source)</th>
+                            <th class="border p-2">英文重写 (Rewrite)</th>
+                            <th class="border p-2">中文翻译 (Chinese)</th>
+                            <th class="border p-2">使用的关键词 (Keywords)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+<script>
+const WORKER_URL = "https://seo-rewrite-worker2.baoyiguo43.workers.dev";
+
+function showError(msg){
+    const err = document.getElementById('errorMessage');
+    err.textContent = msg;
+    err.classList.remove('hidden');
+}
+
+function copyResult(){
+    const tbody = document.getElementById('resultTableBody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    if (!rows.length) return;
+    const out = rows
+        .map(tr => Array.from(tr.querySelectorAll('td')).map(td => td.innerText).join('\t'))
+        .join('\n');
+    navigator.clipboard.writeText(out);
+}
+
+async function generateRewrite(){
+    try {
+        const source = document.getElementById('sourceSentences').value.trim();
+        const mandatory = document.getElementById('mandatoryKeywords').value.trim();
+        const optional = document.getElementById('optionalKeywords').value.trim();
+        const custom = document.getElementById('customInstructions').value.trim();
+        const userApiKey = document.getElementById('userApiKey').value.trim();
+
+        if (!source) return showError('请输入要重写的原句');
+
+        document.getElementById('errorMessage').classList.add('hidden');
+        document.getElementById('resultArea').classList.remove('hidden');
+        document.getElementById('resultTableBody').innerHTML = "<tr><td class='p-4' colspan='4'>正在生成...</td></tr>";
+
+        const resp = await fetch(WORKER_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mandatoryKeywords: mandatory, optionalKeywords: optional, sourceSentences: source, customInstructions: custom, userApiKey: userApiKey || null })
+        });
+
+        const data = await resp.json();
+        if (data.error) return showError(data.error);
+
+        const text = data.result;
+        const blocks = text.split(/---/g).map(b => b.trim()).filter(Boolean);
+
+        const tbody = document.getElementById('resultTableBody');
+        tbody.innerHTML = '';
+
+        blocks.forEach(block => {
+            const row = { src:'', en:'', zh:'', kw:'' };
+
+            block.split(/\n+/).forEach(line => {
+                if (line.startsWith('**原句:**')) row.src = line.replace('**原句:**','').trim();
+                if (line.startsWith('**英文重写:**')) row.en = line.replace('**英文重写:**','').trim();
+                if (line.startsWith('**中文翻译:**')) row.zh = line.replace('**中文翻译:**','').trim();
+                if (line.startsWith('**使用的关键词:**')) row.kw = line.replace('**使用的关键词:**','').trim();
+            });
+
+            tbody.insertAdjacentHTML('beforeend',`
+                <tr>
+                    <td class="border p-3 align-top whitespace-pre-line">${row.src}</td>
+                    <td class="border p-3 align-top whitespace-pre-line">${row.en}</td>
+                    <td class="border p-3 align-top whitespace-pre-line">${row.zh}</td>
+                    <td class="border p-3 align-top whitespace-pre-line">${row.kw}</td>
+                </tr>
+            `);
+        });
+    } catch (e) {
+        showError(e.message);
+    }
+}
+</script>
+
+</body>
+</html>
